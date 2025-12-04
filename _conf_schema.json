@@ -1,0 +1,68 @@
+{
+  "width_param": {
+    "description": "指定输出宽度的参数名",
+    "type": "string",
+    "hint": "例如: -w 或 --width。使用时: /ascii -w 150 或 /ascii --width 150",
+    "default": "--width"
+  },
+  "charset_param": {
+    "description": "指定字符集的参数名",
+    "type": "string",
+    "hint": "例如: -c 或 --charset。使用时: /ascii -c @#$% 或 /ascii --charset @#$%",
+    "default": "--charset"
+  },
+  "chinese_param": {
+    "description": "使用中文字符集的参数名",
+    "type": "string",
+    "hint": "例如: --chinese。使用时: /ascii --chinese",
+    "default": "--chinese"
+  },
+  "default_width": {
+    "description": "默认输出宽度（为空时自动计算）",
+    "type": "int",
+    "hint": "如果指定，使用此宽度替代自动计算。留空或0表示自动计算",
+    "default": 0
+  },
+  "default_charset": {
+    "description": "默认字符集",
+    "type": "string",
+    "hint": "仅当未指定 --charset 时使用。英文字符推荐：@#S%?*+;:,. 或 @%#*+=-:. ",
+    "default": "@#S%?*+;:,."
+  },
+  "default_chinese_charset": {
+    "description": "默认中文字符集",
+    "type": "string",
+    "hint": "仅当使用 --chinese 且未指定字符时使用。推荐字符数 20-40 个",
+    "default": "爱你喜欢我他她它好美帅酷炫酷帅呆了棒赞优强牛厉害威武霸气萌萌哒赞赞赞顶顶顶神神神"
+  },
+  "help_message": {
+    "description": "帮助提示信息",
+    "type": "text",
+    "hint": "用户发送错误命令时显示的帮助信息",
+    "default": "请引用一张图片并发送此命令\n\n使用方法:\n  /ascii - 默认转换\n  /ascii width 150 - 指定输出宽度\n  /ascii charset @#$ - 自定义字符集\n  /ascii chinese - 使用中文字符\n\n可以组合使用多个参数"
+  },
+  "min_width": {
+    "description": "最小宽度限制",
+    "type": "int",
+    "hint": "用户指定的宽度不能小于此值",
+    "default": 50
+  },
+  "max_width": {
+    "description": "最大宽度限制",
+    "type": "int",
+    "hint": "用户指定的宽度不能大于此值",
+    "default": 300
+  },
+  "cache_cleanup_interval": {
+    "description": "图片缓存清理间隔",
+    "type": "int",
+    "hint": "多久清理一次图片文件缓存，单位为分钟",
+    "default": 60
+  },
+  "cache_max_age": {
+    "description": "图片文件最大保留时间",
+    "type": "int",
+    "hint": "单个图片文件最多保留多久，单位为分钟。超过此时间的文件将被删除",
+    "default": 1440
+  }
+}
