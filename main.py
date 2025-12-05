@@ -57,7 +57,10 @@ class AsciiArtPlugin(star.Star):
         
         # 帮助信息
         self.help_message = self.config.get("help_message", "请引用一张图片并发送此命令\n\n使用方法:\n  /ascii - 默认转换\n  /ascii width 150 - 指定输出宽度\n  /ascii charset @#$ - 自定义字符集\n  /ascii chinese - 使用中文字符\n\n可以组合使用多个参数")
-    
+        
+        # 结果消息文本
+        self.result_message = self.config.get("result_message", "图片已转换为ASCII艺术:")
+
     async def _start_cleanup_task(self):
         """启动定期清理缓存文件的后台任务"""
         try:
@@ -120,7 +123,9 @@ class AsciiArtPlugin(star.Star):
             "width": self.default_width,
             "charset": self.default_charset,
             "use_chinese": False,
-            "charset_specified": False  # 标记用户是否明确指定了字符集
+            "charset_specified": False,  # 标记用户是否明确指定了字符集
+            "width_adjusted": False,     # 标记宽度是否被调整
+            "adjusted_width": None       # 记录调整后的宽度
         }
         
         # 分割消息为单个单词
@@ -134,7 +139,19 @@ class AsciiArtPlugin(star.Star):
                 if i + 1 < len(tokens):
                     try:
                         width_val = int(tokens[i + 1])
-                        if self.min_width <= width_val <= self.max_width:
+                        # 检查宽度是否在允许范围内
+                        if width_val < self.min_width:
+                            # 如果小于最小宽度，使用最小宽度
+                            params["width"] = self.min_width
+                            params["width_adjusted"] = True
+                            params["adjusted_width"] = self.min_width
+                        elif width_val > self.max_width:
+                            # 如果大于最大宽度，使用最大宽度
+                            params["width"] = self.max_width
+                            params["width_adjusted"] = True
+                            params["adjusted_width"] = self.max_width
+                        else:
+                            # 在有效范围内，使用用户指定的宽度
                             params["width"] = width_val
                     except ValueError:
                         pass
@@ -236,9 +253,15 @@ class AsciiArtPlugin(star.Star):
                 abs_path = os.path.abspath(ascii_result_path)
                 result_image = BotImage.fromFileSystem(abs_path)
                 chain = [
-                    Plain("图片已转换为ASCII艺术:"),
+                    Plain(self.result_message),
                     result_image
                 ]
+                
+                # 如果宽度被调整，添加提示信息
+                if params.get("width_adjusted"):
+                    adjustment_msg = f"\n\n指定的宽度超出限制范围，已自动调整为 {params['adjusted_width']}"
+                    chain.insert(1, Plain(adjustment_msg))
+                
                 event.set_result(event.chain_result(chain))
             else:
                 event.set_result(event.plain_result("转换失败，请稍后重试"))

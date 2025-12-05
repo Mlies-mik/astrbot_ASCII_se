@@ -64,5 +64,11 @@
     "type": "int",
     "hint": "单个图片文件最多保留多久，单位为分钟。超过此时间的文件将被删除",
     "default": 1440
+  },
+  "result_message": {
+    "description": "转换结果消息文本",
+    "type": "string",
+    "hint": "图片转换成功后返回的消息文本",
+    "default": "图片已转换为ASCII艺术:"
   }
 }
