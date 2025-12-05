@@ -28,7 +28,7 @@ class AsciiArtPlugin(star.Star):
         # 初始化配置参数
         self._init_config()
         
-        # 设置日志记录器
+        # 设置日志记录
         self.logger = logging.getLogger("AsciiArtPlugin")
         
         # 启动定期清理缓存文件的后台任务
@@ -59,7 +59,7 @@ class AsciiArtPlugin(star.Star):
         self.help_message = self.config.get("help_message", "请引用一张图片并发送此命令\n\n使用方法:\n  /ascii - 默认转换\n  /ascii width 150 - 指定输出宽度\n  /ascii charset @#$ - 自定义字符集\n  /ascii chinese - 使用中文字符\n\n可以组合使用多个参数")
         
         # 结果消息文本
-        self.result_message = self.config.get("result_message", "图片已转换为ASCII:")
+        self.result_message = self.config.get("result_message", "图片已转换为ASCII艺术:")
 
     async def _start_cleanup_task(self):
         """启动定期清理缓存文件的后台任务"""
@@ -178,7 +178,7 @@ class AsciiArtPlugin(star.Star):
     @filter.command("ascii")
     async def ascii_command(self, event: AstrMessageEvent):
         """
-        将引用的图片转换为ASCII图
+        将引用的图片转换为ASCII
         使用方法:
         1. 在QQ中引用一张图片并发送 "/ascii" 指令
         2. 支持自定义参数，具体参数名和别名可在配置面板中设置
@@ -228,7 +228,7 @@ class AsciiArtPlugin(star.Star):
                 event.set_result(event.plain_result("无法获取图片数据"))
                 return
             
-            # 转换为ASCII图
+            # 转换为ASCII
             if params["use_chinese"]:
                 # 使用中文模式
                 # 如果用户指定了字符集，使用用户指定的；否则使用默认中文字符集
@@ -304,50 +304,12 @@ class AsciiArtPlugin(star.Star):
     
     def _sync_convert_image_to_ascii(self, image_path: str, width: int = None, charset: str = "@#S%?*+;:,.",
                                    use_chinese: bool = False) -> str:
-        """同步版本的图片转ASCII艺术（通用方法）"""
-        # 打开并处理图片
+        """同步版本的图片转ASCII（尝试修复字符本身比例问题）"""
+        # 1. 打开图片
         img = Image.open(image_path)
         
-        # 基于图片宽度自动确定合适的字符宽度
-        if width is None:
-            if use_chinese:
-                # 对于中文字符，使用较小的宽度以适应字符的复杂性
-                width = max(50, min(img.width // 10, 150))
-            else:
-                width = max(100, min(img.width // 6, 300))
-        
-        # 计算新尺寸保持宽高比
-        aspect_ratio = img.height / img.width
-        new_width = width
-        new_height = int(aspect_ratio * width)
-        
-        # 调整图片大小并转换为灰度图
-        img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-        img = img.convert("L")  # 转换为灰度图
-        
-        # 生成ASCII图
-        ascii_chars = list(charset)
-        result = ""
-        
-        # 计算每个字符代表的灰度值范围
-        step = 256 // len(ascii_chars)
-        
-        for i in range(new_height):
-            for j in range(new_width):
-                gray_value = img.getpixel((j, i))
-                # 根据灰度值选择合适的字符
-                char_index = min(int(gray_value / step), len(ascii_chars) - 1)
-                result += ascii_chars[char_index]
-            result += "\n"
-        
-        # 保存为图片文件
-        if use_chinese:
-            output_filename = f"ascii_result_chinese_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.png"
-        else:
-            output_filename = f"ascii_result_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.png"
-        output_path = os.path.join(self.plugin_data_dir, output_filename)
-        
-        # 创建一个新的图像来绘制ASCII图
+        # 2. 提前加载字体并测量字符尺寸
+        #    为了计算正确的缩放比例，必须先知道字符的宽高比
         font_size = 12 if use_chinese else 10
         font = None
         
@@ -367,53 +329,81 @@ class AsciiArtPlugin(star.Star):
         # 如果没有找到中文字体，则使用默认字体
         if font is None:
             try:
-                # 尝试使用系统等宽字体
                 font = ImageFont.truetype("consola.ttf", font_size)
             except:
                 try:
                     font = ImageFont.truetype("cour.ttf", font_size)
                 except:
                     try:
-                        # 在Linux/Mac系统上尝试
                         font = ImageFont.truetype("DejaVuSansMono.ttf", font_size)
                     except:
                         try:
                             font = ImageFont.truetype("Arial.ttf", font_size)
                         except:
-                            # 使用默认字体
                             font = ImageFont.load_default()
         
         # 准确测量字符尺寸
         try:
-            # 对于较新的PIL版本
             test_char = "中" if use_chinese else "A"
             bbox = font.getbbox(test_char)
             char_width = bbox[2] - bbox[0]
             char_height = bbox[3] - bbox[1]
         except:
             try:
-                # 对于较老的PIL版本
                 test_char = "中" if use_chinese else "A"
                 char_width, char_height = font.getsize(test_char)
             except:
-                # 默认值
                 char_width, char_height = (12, 12) if use_chinese else (8, 12)
+
+        # 3. 计算新尺寸（加入字符比例修正）
+        if width is None:
+            if use_chinese:
+                width = max(50, min(img.width // 10, 150))
+            else:
+                width = max(100, min(img.width // 6, 300))
         
-        # 计算图像尺寸
+        aspect_ratio = img.height / img.width
+        new_width = width
+        # 核心修正：高度需要乘以 (字符宽/字符高) 来抵消字符本身的细长形状
+        # 例如：如果字符高是宽的2倍，我们需要将行数(new_height)减半，才能在最终图片中保持原比例
+        correction_factor = char_width / char_height
+        new_height = int(aspect_ratio * width * correction_factor)
+        
+        # 4. 调整图片大小并转换为灰度图
+        img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        img = img.convert("L")
+        
+        # 5. 生成ASCII字符
+        ascii_chars = list(charset)
+        result = ""
+        step = 256 // len(ascii_chars)
+        
+        for i in range(new_height):
+            for j in range(new_width):
+                gray_value = img.getpixel((j, i))
+                char_index = min(int(gray_value / step), len(ascii_chars) - 1)
+                result += ascii_chars[char_index]
+            result += "\n"
+        
+        # 6. 保存为图片文件
+        if use_chinese:
+            output_filename = f"ascii_result_chinese_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.png"
+        else:
+            output_filename = f"ascii_result_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.png"
+        output_path = os.path.join(self.plugin_data_dir, output_filename)
+        
+        # 计算最终图像尺寸
         img_width = new_width * char_width
         img_height = new_height * char_height
         
-        # 创建新图像，使用白色背景黑色文字更清晰
+        # 绘制
         ascii_img = Image.new("RGB", (img_width, img_height), color="white")
         draw = ImageDraw.Draw(ascii_img)
         
-        # 绘制ASCII图
         lines = result.split("\n")
         for i, line in enumerate(lines):
-            if line:  # 忽略空行
-                # 使用黑色绘制文字
+            if line:
                 draw.text((0, i * char_height), line, fill="black", font=font)
         
-        # 保存图像
         ascii_img.save(output_path)
         return output_path
