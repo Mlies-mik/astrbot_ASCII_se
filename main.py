@@ -59,7 +59,7 @@ class AsciiArtPlugin(star.Star):
         self.help_message = self.config.get("help_message", "请引用一张图片并发送此命令\n\n使用方法:\n  /ascii - 默认转换\n  /ascii width 150 - 指定输出宽度\n  /ascii charset @#$ - 自定义字符集\n  /ascii chinese - 使用中文字符\n\n可以组合使用多个参数")
         
         # 结果消息文本
-        self.result_message = self.config.get("result_message", "图片已转换为ASCII艺术:")
+        self.result_message = self.config.get("result_message", "图片已转换为ASCII:")
 
     async def _start_cleanup_task(self):
         """启动定期清理缓存文件的后台任务"""
@@ -178,7 +178,7 @@ class AsciiArtPlugin(star.Star):
     @filter.command("ascii")
     async def ascii_command(self, event: AstrMessageEvent):
         """
-        将引用的图片转换为ASCII艺术
+        将引用的图片转换为ASCII图
         使用方法:
         1. 在QQ中引用一张图片并发送 "/ascii" 指令
         2. 支持自定义参数，具体参数名和别名可在配置面板中设置
@@ -228,7 +228,7 @@ class AsciiArtPlugin(star.Star):
                 event.set_result(event.plain_result("无法获取图片数据"))
                 return
             
-            # 转换为ASCII艺术
+            # 转换为ASCII图
             if params["use_chinese"]:
                 # 使用中文模式
                 # 如果用户指定了字符集，使用用户指定的；否则使用默认中文字符集
@@ -325,7 +325,7 @@ class AsciiArtPlugin(star.Star):
         img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
         img = img.convert("L")  # 转换为灰度图
         
-        # 生成ASCII艺术
+        # 生成ASCII图
         ascii_chars = list(charset)
         result = ""
         
@@ -347,7 +347,7 @@ class AsciiArtPlugin(star.Star):
             output_filename = f"ascii_result_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.png"
         output_path = os.path.join(self.plugin_data_dir, output_filename)
         
-        # 创建一个新的图像来绘制ASCII艺术
+        # 创建一个新的图像来绘制ASCII图
         font_size = 12 if use_chinese else 10
         font = None
         
@@ -407,7 +407,7 @@ class AsciiArtPlugin(star.Star):
         ascii_img = Image.new("RGB", (img_width, img_height), color="white")
         draw = ImageDraw.Draw(ascii_img)
         
-        # 绘制ASCII艺术
+        # 绘制ASCII图
         lines = result.split("\n")
         for i, line in enumerate(lines):
             if line:  # 忽略空行
