@@ -1,9 +1,9 @@
 {
-  "width_param": {
-    "description": "指定输出宽度的参数名",
+  "scale_param": {
+    "description": "指定清晰度倍数的参数名",
     "type": "string",
-    "hint": "例如: -w 或 --width。使用时: /ascii -w 150 或 /ascii --width 150",
-    "default": "--width"
+    "hint": "例如: -s 或 --scale。使用时: /ascii -s 1.5 或 /ascii --scale 1.5",
+    "default": "--scale"
   },
   "charset_param": {
     "description": "指定字符集的参数名",
@@ -17,11 +17,11 @@
     "hint": "例如: --chinese。使用时: /ascii --chinese",
     "default": "--chinese"
   },
-  "default_width": {
-    "description": "默认输出宽度（为空时自动计算）",
-    "type": "int",
-    "hint": "如果指定，使用此宽度替代自动计算。留空或0表示自动计算",
-    "default": 0
+  "default_scale": {
+    "description": "默认清晰度倍数",
+    "type": "float",
+    "hint": "默认为1.0，即使用插件原有的自适应逻辑。数值越大越清晰，但处理时间也会相应增加",
+    "default": 1.0
   },
   "default_charset": {
     "description": "默认字符集",
@@ -39,19 +39,25 @@
     "description": "帮助提示信息",
     "type": "text",
     "hint": "用户发送错误命令时显示的帮助信息",
-    "default": "请引用一张图片并发送此命令\n\n使用方法:\n  /ascii - 默认转换\n  /ascii width 150 - 指定输出宽度\n  /ascii charset @#$ - 自定义字符集\n  /ascii chinese - 使用中文字符\n\n可以组合使用多个参数"
+    "default": "请引用一张图片并发送此命令\n\n使用方法:\n  /ascii - 默认清晰度(1.0倍)\n  /ascii --scale 1.5 - 提高清晰度(1.5倍)\n  /ascii --scale 0.5 - 降低清晰度(0.5倍)\n  /ascii --charset @#$ - 自定义字符集\n  /ascii --chinese - 使用中文字符\n\n可以组合使用多个参数"
   },
-  "min_width": {
-    "description": "最小宽度限制",
-    "type": "int",
-    "hint": "用户指定的宽度不能小于此值",
-    "default": 50
+  "min_scale": {
+    "description": "最小清晰度倍数限制",
+    "type": "float",
+    "hint": "用户指定的清晰度倍数不能小于此值",
+    "default": 0.1
   },
-  "max_width": {
-    "description": "最大宽度限制",
+  "max_scale": {
+    "description": "最大清晰度倍数限制",
+    "type": "float",
+    "hint": "用户指定的清晰度倍数不能大于此值",
+    "default": 5.0
+  },
+  "max_dimension": {
+    "description": "输出图片最大尺寸限制",
     "type": "int",
-    "hint": "用户指定的宽度不能大于此值",
-    "default": 300
+    "hint": "输出图片的最大长宽限制（像素），不能超过硬编码的6000像素限制",
+    "default": 4096
   },
   "cache_cleanup_interval": {
     "description": "图片缓存清理间隔",
