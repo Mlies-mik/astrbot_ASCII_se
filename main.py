@@ -12,7 +12,7 @@ import logging
 
 from astrbot.api import star, AstrBotConfig
 from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.message_components import Image as BotImage, Reply, Plain
+from astrbot.api.message_components import Image as BotImage, Reply, Plain, At
 from astrbot.api.star import StarTools
 
 
@@ -115,6 +115,25 @@ class AsciiArtPlugin(star.Star):
         except Exception as e:
             self.logger.error("[缓存清理] 清理过程出错: %s", e, exc_info=True)
 
+    async def _download_image(self, url: str) -> bytes | None:
+        """下载图片"""
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as resp:
+                    resp.raise_for_status()
+                    return await resp.read()
+        except Exception as e:
+            self.logger.error(f"下载图片失败: {url}, 错误: {e}")
+            return None
+
+    async def _get_avatar(self, user_id: str) -> bytes | None:
+        """获取用户QQ头像"""
+        if not user_id.isdigit():
+            return None
+
+        avatar_url = f"https://q1.qlogo.cn/g?b=qq&nk={user_id}&s=640"
+        return await self._download_image(avatar_url)
+
     def _parse_command_params(self, message_text: str) -> dict:
         """解析命令参数"""
         params = {
@@ -165,30 +184,48 @@ class AsciiArtPlugin(star.Star):
             i += 1
         return params
 
+    async def _get_images(self, event: AstrMessageEvent) -> bytes | None:
+        """获取图片数据，支持从消息、回复和@用户头像中获取"""
+        # 查找直接发送的图片或回复中的图片
+        for component in event.message_obj.message:
+            if isinstance(component, BotImage):
+                if component.url:
+                    return await self._download_image(component.url)
+                elif component.file:
+                    return open(component.file, 'rb').read()
+            elif isinstance(component, Reply) and component.chain:
+                for reply_component in component.chain:
+                    if isinstance(reply_component, BotImage):
+                        if reply_component.url:
+                            return await self._download_image(reply_component.url)
+                        elif reply_component.file:
+                            return open(reply_component.file, 'rb').read()
+        
+        # 查找@用户并获取其头像
+        for component in event.message_obj.message:
+            if isinstance(component, At):
+                avatar_data = await self._get_avatar(str(component.qq))
+                if avatar_data:
+                    return avatar_data
+                    
+        return None
+
     @filter.command("ascii")
     async def ascii_command(self, event: AstrMessageEvent):
         """主命令入口"""
+        # 提取纯文本内容用于参数解析
         message_text = ""
         for comp in getattr(event.message_obj, "message", []):
             if isinstance(comp, Plain):
                 message_text += comp.text
 
+        # 解析命令参数
         params = self._parse_command_params(message_text)
 
-        reply_image = None
-        for component in event.message_obj.message:
-            if isinstance(component, BotImage):
-                reply_image = component
-                break
-            elif isinstance(component, Reply) and component.chain:
-                for reply_component in component.chain:
-                    if isinstance(reply_component, BotImage):
-                        reply_image = reply_component
-                        break
-                if reply_image:
-                    break
-
-        if not reply_image:
+        # 获取图片数据（从消息、回复或@用户头像）
+        image_data = await self._get_images(event)
+        
+        if not image_data:
             event.set_result(event.plain_result(self.help_message))
             return
 
@@ -197,13 +234,9 @@ class AsciiArtPlugin(star.Star):
         temp_path = os.path.join(temp_dir, temp_filename)
 
         try:
-            if reply_image.url:
-                await self.download_image(reply_image.url, temp_path)
-            elif reply_image.file:
-                shutil.copy(reply_image.file, temp_path)
-            else:
-                event.set_result(event.plain_result("无法获取图片数据"))
-                return
+            # 保存图片数据到临时文件
+            with open(temp_path, "wb") as f:
+                f.write(image_data)
 
             # 区分中文/英文模式
             use_chinese = params["use_chinese"]
