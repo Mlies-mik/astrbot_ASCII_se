@@ -54,9 +54,9 @@
     "default": 5.0
   },
   "max_dimension": {
-    "description": "输出图片最大尺寸限制",
+    "description": "输出图片最大边长限制",
     "type": "int",
-    "hint": "输出图片的最大长宽限制（像素），不能超过硬编码的6000像素限制",
+    "hint": "输出图片的最大边长限制（像素），实际总像素数限制为该值的平方，不能超过硬编码的约5477像素限制",
     "default": 4096
   },
   "cache_cleanup_interval": {
@@ -70,6 +70,12 @@
     "type": "int",
     "hint": "单个图片文件最多保留多久，单位为分钟。超过此时间的文件将被删除",
     "default": 1440
+  },
+  "auto_scale_adjust": {
+    "description": "是否自动调整放大倍数",
+    "type": "bool",
+    "hint": "当放大倍数导致总像素数超过限制时，是否自动调整为最大允许的放大倍数",
+    "default": true
   },
   "result_message": {
     "description": "转换结果消息文本",

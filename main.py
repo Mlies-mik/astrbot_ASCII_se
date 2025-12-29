@@ -17,9 +17,8 @@ from astrbot.api.star import StarTools
 
 
 class AsciiArtPlugin(star.Star):
-    """尝试硬编码一个限制，像素上限 (6000px)
-    不出意外的话，这个限制比配置文件中的限制更优先,避免图片过大"""
-    ABSOLUTE_MAX_DIMENSION = 6000
+    """尝试硬编码一个限制，总像素上限 (30000000px，约5477x5477像素)"""
+    ABSOLUTE_MAX_PIXELS = 30000000  # 约5477*5477 像素
 
     def __init__(self, context: star.Context, config: AstrBotConfig = None) -> None:
         super().__init__(context)
@@ -56,12 +55,17 @@ class AsciiArtPlugin(star.Star):
         self.min_scale = self.config.get("min_scale", 0.1)
         self.max_scale = self.config.get("max_scale", 10.0)  # 放宽最大倍数限制
 
-        user_max_dim = self.config.get("max_dimension", 6000) # 默认调大到6000以适应高画质
-        self.effective_max_dim = min(user_max_dim, self.ABSOLUTE_MAX_DIMENSION)
+        user_max_dimension = self.config.get("max_dimension", 6000) # 默认调大到6000以适应高画质
+        # 计算基于用户配置的最大边长对应的最大总像素数
+        user_max_pixels = user_max_dimension * user_max_dimension
+        self.effective_max_pixels = min(user_max_pixels, self.ABSOLUTE_MAX_PIXELS)
 
         self.cache_cleanup_interval = self.config.get("cache_cleanup_interval", 60)
         self.cache_max_age = self.config.get("cache_max_age", 1440)
+        self.auto_scale_adjust = self.config.get("auto_scale_adjust", True)
 
+        # 计算等效边长用于显示
+        effective_max_dim = int(self.effective_max_pixels ** 0.5)
         self.help_message = self.config.get("help_message",
                                             "请引用一张图片并发送此命令\n\n"
                                             "使用方法:\n"
@@ -70,7 +74,7 @@ class AsciiArtPlugin(star.Star):
                                             "  /ascii --scale 0.8 - 降低清晰度\n"
                                             "  /ascii --charset @#$ - 自定义字符集\n"
                                             "  /ascii --chinese - 使用中文字符\n\n"
-                                            f"注意：输出图片长宽限制为 {self.effective_max_dim}px"
+                                            f"注意：输出图片总像素数限制为 {self.effective_max_pixels} ({effective_max_dim}x{effective_max_dim})"
                                             )
 
         self.result_message = self.config.get("result_message", "图片已转换为ASCII艺术:")
@@ -154,6 +158,8 @@ class AsciiArtPlugin(star.Star):
                 if i + 1 < len(tokens):
                     try:
                         scale_val = float(tokens[i + 1])
+                        # 保存原始用户请求的scale值
+                        params["original_scale"] = scale_val
                         if scale_val < self.min_scale:
                             params["scale"] = self.min_scale
                             params["scale_adjusted"] = True
@@ -258,7 +264,18 @@ class AsciiArtPlugin(star.Star):
                     result_image = BotImage.fromFileSystem(abs_path)
                     chain = [Plain(self.result_message), result_image]
 
-                    if params.get("scale_adjusted"):
+                    # 检查是否因像素限制进行了自动调整（这是最终的调整）
+                    if hasattr(self, '_scale_auto_adjusted') and self._scale_auto_adjusted:
+                        # 如果像素限制导致了调整，显示最终的scale值
+                        # 使用原始请求的scale值作为原设定
+                        original_request = params.get("original_scale", params["scale"])
+                        adjustment_msg = f"\n\n倍数因像素限制自动调整为 {self._final_scale:.2f} (原设定: {original_request})"
+                        chain.insert(1, Plain(adjustment_msg))
+                        # 重置标志
+                        self._scale_auto_adjusted = False
+                    elif params.get("scale_adjusted"):
+                        # 如果只是配置范围限制调整，且没有像素限制调整，则显示配置限制调整
+                        # 但这种情况在自动调整模式下不应该发生，因为像素限制会覆盖配置限制
                         adjustment_msg = f"\n\n倍数超出配置范围，已自动调整为 {params['adjusted_scale']}"
                         chain.insert(1, Plain(adjustment_msg))
 
@@ -268,6 +285,7 @@ class AsciiArtPlugin(star.Star):
 
             except ValueError as ve:
                 # 捕获在转换函数中抛出的尺寸过大异常
+                # 当auto_scale_adjust为False时，转换函数会抛出异常并建议最大倍数
                 event.set_result(event.plain_result(f"生成失败: {str(ve)}"))
 
         except Exception as e:
@@ -374,12 +392,51 @@ class AsciiArtPlugin(star.Star):
         # F4 安全检查
         final_pixel_width = new_grid_width * char_width
         final_pixel_height = new_grid_height * char_height
+        total_pixels = final_pixel_width * final_pixel_height
 
-        if final_pixel_width > self.effective_max_dim or final_pixel_height > self.effective_max_dim:
-            raise ValueError(
-                f"输出尺寸 ({final_pixel_width}x{final_pixel_height}) 超过限制 ({self.effective_max_dim}px)。"
-                f"当前倍数: {scale}, 请尝试减小 --scale 参数。"
-            )
+        # 保存原始scale值用于后续比较
+        original_scale = scale
+        
+        if total_pixels > self.effective_max_pixels:
+            # 计算最大允许的放大倍数
+            # 最终像素宽度 = (base_grid_width * scale) * char_width
+            # 最终像素高度 = (aspect_ratio * base_grid_width * scale * correction_factor) * char_height
+            # 总像素 = 最终像素宽度 * 最终像素高度
+            # 总像素 = (base_grid_width * scale * char_width) * (aspect_ratio * base_grid_width * scale * correction_factor * char_height)
+            # 总像素 = base_grid_width^2 * scale^2 * char_width * aspect_ratio * correction_factor * char_height
+            # 所以 scale^2 = effective_max_pixels / (base_grid_width^2 * char_width * aspect_ratio * correction_factor * char_height)
+            
+            # 计算最大允许的scale
+            denominator = (base_grid_width * base_grid_width * char_width * aspect_ratio * correction_factor * char_height)
+            if denominator > 0:
+                max_allowed_scale_squared = self.effective_max_pixels / denominator
+                max_allowed_scale = max_allowed_scale_squared ** 0.5
+            else:
+                # 防止除零错误
+                max_allowed_scale = scale
+            
+            if self.auto_scale_adjust:
+                # 如果启用自动调整，使用计算出的最大允许scale
+                new_scale = min(scale, max_allowed_scale)
+                # 重新计算网格尺寸
+                new_grid_width = int(base_grid_width * new_scale)
+                new_grid_height = int(aspect_ratio * new_grid_width * correction_factor)
+                
+                # 重新计算最终像素尺寸
+                final_pixel_width = new_grid_width * char_width
+                final_pixel_height = new_grid_height * char_height
+                
+                # 记录调整信息用于后续提示
+                params_adjusted = True
+                scale = new_scale  # 更新scale为调整后的值
+            else:
+                # 如果不启用自动调整，抛出异常并提供最大允许的scale
+                raise ValueError(
+                    f"输出尺寸 ({final_pixel_width}x{final_pixel_height}) 总像素数({total_pixels}) 超过限制 ({int(self.effective_max_pixels**0.5)}x{int(self.effective_max_pixels**0.5)})。"
+                    f"当前倍数: {scale}, 建议使用最大倍数: {max_allowed_scale:.2f}"
+                )
+        else:
+            params_adjusted = False
 
         # F5 图片处理
         img = img.resize((new_grid_width, new_grid_height), Image.Resampling.LANCZOS)
@@ -424,4 +481,10 @@ class AsciiArtPlugin(star.Star):
             draw.text((0, i * char_height), line, fill="black", font=font)
 
         ascii_img.save(output_path)
+        # 如果在转换过程中调整了scale，设置标志
+        if 'params_adjusted' in locals() and params_adjusted:
+            self._scale_auto_adjusted = True
+            self._final_scale = scale
+            # 使用传入的原始scale值作为原始请求值
+            self._original_scale = original_scale
         return output_path
